@@ -146,28 +146,22 @@ def is_valid_tok_word(w: str) -> bool:
             # the previous syllable didn't have coda nasal.
             return False
         if is_valid_tok_syllable(w[0:1]):
-            # Are we looking at a one character long syllable?
+            # Are we looking at a one character long first syllable?
             # If it is a valid syllable, then let's take the
-            # hypothesis that the word has this syllable and
+            # hypothesis that the word starts with this syllable and
             # check whether the rest of the word is valid too.
             if is_valid_tok_word_r(w[1:], False, False):
                 # If so, then we have determined this is a valid word!
                 return True
         if is_valid_tok_syllable(w[0:2]):
-            # Are we looking at a two character long syllable?
-            # If it is a valid syllable, then let's take the
-            # hypothesis that the word has this syllable and
-            # check whether the rest of the word is valid too.
+            # Are we looking at a two character long first syllable?
+            # Same strategy as before...
             if is_valid_tok_word_r(w[2:], False, w[1] == "n"):
-                # If so, then we have determined this is a valid word!
                 return True
         if is_valid_tok_syllable(w[0:3]):
-            # Are we looking at a three character long syllable?
-            # If it is a valid syllable, then let's take the
-            # hypothesis that the word has this syllable and
-            # check whether the rest of the word is valid too.
+            # Are we looking at a three character long first syllable?
+            # Same strategy as before...
             if is_valid_tok_word_r(w[3:], False, True):
-                # If so, then we have determined this is a valid word!
                 return True
         # We tried all possible hypothesis, and none returned a valid
         # reading of the word. This is not a valid word.
@@ -197,33 +191,76 @@ def yield_tok_words(syllable_count: int) -> Generator[str, None, None]:
     Raises:
         ValueError: if syllable_count is not a positive integer.
     """
+    def yield_tok_words_r(
+            syllable_count: int, start: bool, after_nasal: bool
+    ) -> Generator[str, None, None]:
+        # Start by picking the syllables that are valid to start this word
+        valid_head_syllables = []
+        for s in _TOK_SYLLABLES:
+            if s[0] in _TOK_VOWELS and not start:
+                continue
+            if s[0] in "mn" and after_nasal:
+                continue
+            valid_head_syllables.append(s)
+
+        # If the words we are generating are 1 syllable long, then we can
+        # just yield from the list of valid syllables, as they are already
+        # sorted alphabetically
+        if syllable_count == 1:
+            yield from valid_head_syllables
+        else:
+            # We will generate words by picking a head syllable, and generating
+            # the tail of the word using this generator recursively.
+            # In order to correctly yield the words in alphabetical order, we
+            # must look at a pair of head syllables (C)V and (C)Vn.
+            # We will have a generator for each, and while both have not
+            # stopped, we will yield the first-in-order generated word, replace
+            # it, and repeat. Once a generator has stopped, we can safely
+            # exhaust the other and advance to the next pair of head syllables.
+            for i in range(0, len(valid_head_syllables), 2):
+                syll = valid_head_syllables[i]
+                syll_n = valid_head_syllables[i + 1]
+                tail_gens = {
+                    syll:
+                        yield_tok_words_r(syllable_count - 1, False, False),
+                    syll_n:
+                        yield_tok_words_r(syllable_count - 1, False, True)
+                }
+                words = {
+                    syll:
+                        syll + next(tail_gens[syll]),
+                    syll_n:
+                        syll_n + next(tail_gens[syll_n])
+                }
+                while True:
+                    # We have two possible words to yield.
+                    # We want to yield the one that is first, alphabetically.
+                    syll_to_use = syll
+                    other_syll = syll_n
+                    if words[syll_n] < words[syll]:
+                        syll_to_use = syll_n
+                        other_syll = syll
+                    # Note that we don't need to check if the word is valid,
+                    # because we know the tail generators can only pick
+                    # valid syllables to go after these head ones.
+                    yield words[syll_to_use]
+                    try:
+                        words[syll_to_use] = (
+                            syll_to_use + next(tail_gens[syll_to_use]))
+                    except StopIteration:
+                        # No more words for this head syllable.
+                        # We can yield the rest of the words from the
+                        # other one and advance to the next pair.
+                        yield words[other_syll]
+                        for w in tail_gens[other_syll]:
+                            yield other_syll + w
+                        break
+
     if syllable_count < 1:
         raise ValueError("syllable_count must be a positive integer")
 
-    # Take all possible permutations of syllable_count syllables,
-    # yield those that correspond to valid words.
-    # To avoid repetitions, we will only consider CV(n) syllables
-    # for all except the first syllable of the generating word.
-    valid_first_sylls = _TOK_SYLLABLES
-    n_valid_first_sylls = len(valid_first_sylls)
-    valid_tail_sylls = [s for s in _TOK_SYLLABLES if s[0] not in _TOK_VOWELS]
-    n_valid_tail_sylls = len(valid_tail_sylls)
-    max_permutations = (n_valid_first_sylls *
-                        (n_valid_tail_sylls ** (syllable_count - 1)))
-    for p in range(max_permutations):
-        w_sylls = []
-        syll_picker = p
-        # Pick the syllables for the tail of the word.
-        for i in range(syllable_count - 1):
-            w_sylls.append(valid_tail_sylls[syll_picker % n_valid_tail_sylls])
-            syll_picker = syll_picker // n_valid_tail_sylls
-        # Pick a first syllable.
-        w_sylls.append(valid_first_sylls[syll_picker % n_valid_first_sylls])
-        # Building the word from right to left guarantees alphabetical order.
-        word = "".join(w_sylls[::-1])
-        if is_valid_tok_word(word):
-            # Not all permutations result in a valid word!
-            yield word
+    # Recursive implementation - we need to give a couple of initial values
+    yield from yield_tok_words_r(syllable_count, True, False)
 
 
 _TOK_NIMI_PU = ["a", "akesi", "ala", "alasa", "ale", "anpa", "ante", "anu",
@@ -373,8 +410,7 @@ def generate_words(options: PaliNimiGenerationOptions) -> List[str]:
 
 if __name__ == "__main__":
     def output(result: List[str]):
-        for r in result:
-            print(r)
+        print(*result, sep="\n")
 
     parser = argparse.ArgumentParser(
         description="Generate words according to Toki Pona phonotactics.")

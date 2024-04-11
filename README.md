@@ -5,7 +5,7 @@ can be used to help name characters, worlds, pets, etc
 
 ## instalation
 this python script was made using python 3.10  
-might work on other python versions as well
+might work on other python3 versions as well
 
 to install, simply clone this repository:  
 ```bash
@@ -19,8 +19,8 @@ python3 palinimi.py 2 3
 ```
 this will print out all possible valid toki pona names with 2 to 3 syllables  
 
-you can pick the minimum and maximum number of syllables, but large numbers will  
-take a long time to generate due to the exponential growth of possible syllable  
+you can pick the minimum and maximum number of syllables, but large numbers will
+take a long time to generate due to the exponential growth of possible syllable
 permutations  
 and long names probably aren't too good anyway
 

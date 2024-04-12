@@ -24,7 +24,9 @@ take a long time to generate due to the exponential growth of possible syllable
 permutations  
 and long names probably aren't too good anyway
 
-you can optionally exclude toki pona vocabulary and restrict words to match a regex  
+you can optionally exclude toki pona vocabulary, restrict words to match a regex,
+and set how often words are randomly dropped  
+doing this will constrain the amount of words outputted to more manageable numbers  
 learn how by viewing the help message:  
 ```bash
 python3 palinimi.py -h

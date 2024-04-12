@@ -39,6 +39,7 @@ Typical usage example:
   words = generate_words(options)
 """
 import argparse
+import random
 import re
 from typing import Generator, List
 
@@ -321,6 +322,9 @@ class PaliNimiGenerationOptions:
           Lang").
         regex:
           the regex pattern the generated words must match.
+        drop_probability:
+          the probability of randomly dropping a generated word and not
+          including it in the output
     """
 
     def __init__(self,
@@ -331,7 +335,8 @@ class PaliNimiGenerationOptions:
                  exclude_ku_lili: bool = False,
                  exclude_su: bool = False,
                  exclude_reserved: bool = False,
-                 regex: str = ".*"):
+                 regex: str = ".*",
+                 drop_probability: float = 0.0):
         """Initializes the instance with the given values.
 
         Args:
@@ -359,6 +364,9 @@ class PaliNimiGenerationOptions:
               by Sonja Lang").
             regex:
               the regex pattern the generated words must match.
+            drop_probability:
+              the probability of randomly dropping a generated word and not
+              including it in the output
         """
         self.min_syllables = min_syllables
         self.max_syllables = max_syllables
@@ -368,6 +376,7 @@ class PaliNimiGenerationOptions:
         self.exclude_su = exclude_su
         self.exclude_reserved = exclude_reserved
         self.regex = re.compile(regex)
+        self.drop_probability = drop_probability
 
 
 def generate_words(options: PaliNimiGenerationOptions) -> List[str]:
@@ -393,6 +402,8 @@ def generate_words(options: PaliNimiGenerationOptions) -> List[str]:
     words = []
     for i in range(options.min_syllables, options.max_syllables + 1):
         for w in yield_tok_words(i):
+            if options.drop_probability > random.random():
+                continue
             if options.exclude_pu and w in _TOK_NIMI_PU:
                 continue
             if options.exclude_ku_suli and w in _TOK_NIMI_KU_SULI:
@@ -403,14 +414,16 @@ def generate_words(options: PaliNimiGenerationOptions) -> List[str]:
                 continue
             if options.exclude_reserved and w in _TOK_RESERVED_WORDS:
                 continue
-            if options.regex.match(w) is not None:
-                words.append(w)
+            if options.regex.match(w) is None:
+                continue
+            words.append(w)
     return sorted(words)
 
 
 if __name__ == "__main__":
     def output(result: List[str]):
-        print(*result, sep="\n")
+        if result:
+            print(*result, sep="\n")
 
     parser = argparse.ArgumentParser(
         description="Generate words according to Toki Pona phonotactics.")
@@ -436,6 +449,11 @@ if __name__ == "__main__":
         help="Words will match this regex")
 
     parser.add_argument(
+        "-d", "--drop", type=float, metavar="PROB", default=0.0,
+        help="Probability of randomly droping words "
+        "(a value of 0 will drop no words).")
+
+    parser.add_argument(
         "min", type=int,
         help="Minimum amount of syllables the words will have")
     parser.add_argument(
@@ -451,5 +469,7 @@ if __name__ == "__main__":
         exclude_ku_lili=args.ku_lili,
         exclude_su=args.su,
         exclude_reserved=args.reserved,
-        regex=args.regex)
+        regex=args.regex,
+        drop_probability=args.drop)
+    random.seed()
     output(generate_words(options))
